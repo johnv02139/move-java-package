@@ -1,0 +1,37 @@
+#!/bin/bash
+
+usage ()
+{
+  echo "$0: move java source files from one package to another,"
+  echo "    and clean up whitespace"
+  echo "usage: $0 <old-package> <new-package> <directory>"
+  exit 1
+}
+
+for file in `git status -s | grep '\.java$' | grep com.google.code | awk '{print $2}'`
+do
+  newpath=`echo $file | sed 's,com/google/code/tvrenamer,org/tvrenamer,g'`
+  newdir=`dirname $newpath`
+  /bin/mkdir -p ${newdir}
+  eval `stat -s ${file}`
+  sed -e 's,com.google.code.tvrenamer,org.tvrenamer,g' \
+      -e 's,	,    ,g' \
+      -e 's, [ ]*$,,g' \
+      ${file} > ${newpath}
+  chmod ${st_mode} ${newpath}
+  git rm ${file}
+done
+
+exit 0
+
+for file in `find ${root} -type f -name '*.xml'` `find ${root} -type f -name '*.properties' | xargs grep -l ${olddir}`
+do
+  sed "s,${oldpack},${newpack},g" ${file} > ${tfile}
+  if diff ${file} ${tfile} > /dev/null 2>&1
+  then
+    /bin/rm ${tfile}
+  else
+    /bin/mv ${tfile} ${file}
+  fi
+done
+

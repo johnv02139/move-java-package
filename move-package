@@ -1,0 +1,156 @@
+#!/bin/bash
+
+usage ()
+{
+  if [ -n "$1" ]
+  then
+    echo $*
+  fi
+  prog="`basename $0`"
+  echo "${prog}: move java source files from one package to another,"
+  echo "    and clean up whitespace"
+  echo "usage: ${prog} <directory> <old-package> <new-package>"
+  exit 1
+}
+
+if [ -z "$3" ]
+then
+  usage
+fi
+
+if [ -z "${TMP}" ]
+then
+  export TMP=/tmp
+fi
+
+if [ ! -d "${TMP}" ]
+then
+  echo "Error: could not find usable tmp directory"
+  echo "  Set TMP environment variable and re-run"
+  usage
+fi
+
+root=$1
+old=$2
+new=$3
+
+cd ${root} 2>/dev/null || usage "Error: could not cd to root directory ${root}"
+
+dogit=0
+
+gitroot=`git rev-parse --show-toplevel 2>/dev/null`
+if [ -n "${gitroot}" ]
+then
+  dogit=1
+  # Else, assume that the original command already gave a suitable
+  # error message, so we just exit "silently"
+fi
+
+# `old' and `new' could be separated by either dots or slashes.
+# We allow it either way.  First, though, we want to work with
+# slashes, so we convert any dots to slashes, while leaving any
+# slashes alone.
+
+olddir=`echo ${old} | tr '.' '/'`
+newdir=`echo ${new} | tr '.' '/'`
+
+if [ "${dogit}" = "1" ]
+then
+  files=`git ls-files`
+else
+  files=`find . -type f`
+fi
+
+for file in ${files}
+do
+  oldloc=`dirname $file`
+  newloc=`echo $oldloc | sed "s,${olddir},${newdir},g"`
+  if [ "${oldloc}" != "${newloc}" ]
+  then
+    /bin/mkdir -p ${newloc}
+    # echo "moving ${file} into ${newloc}"
+    if [ "${dogit}" = "1" ]
+    then
+      git mv -f ${file} ${newloc}/
+    else
+      /bin/mv ${file} ${newloc}/
+      /bin/rmdir -p ${oldloc}
+    fi
+  fi
+done
+
+# Now we re-obtain the list of files, because some of them
+# have presumably been moved
+if [ "${dogit}" = "1" ]
+then
+  files=`git ls-files`
+else
+  files=`find . -type f`
+fi
+
+infile=${TMP}/infile.tmp
+/bin/rm -f ${infile}
+
+outfile=${TMP}/outfile.tmp
+/bin/rm -f ${outfile}
+
+# Now we want to work with dots, not slashes.  Convert dots to slashes,
+# and leave slashes alone.
+
+oldregex=`echo ${old} | tr '/' '.' | sed 's,\.,\\\\.,g'`
+newpack=`echo ${new} | tr '/' '.'`
+
+for file in ${files}
+do
+  suffix=${file##*.}
+
+  if [ "${suffix}" = "jar" ]
+  then
+    /bin/cp ${file} ${outfile}
+  elif [ "${suffix}" = "png" ]
+  then
+    /bin/cp ${file} ${outfile}
+  elif [ "${suffix}" = "ico" ]
+  then
+    /bin/cp ${file} ${outfile}
+  elif [ "${suffix}" = "icns" ]
+  then
+    /bin/cp ${file} ${outfile}
+  elif echo ${file} | grep '\.idea' > /dev/null
+  then
+    # We exclude these because otherwise we add an unwanted final newline
+    /bin/cp ${file} ${outfile}
+  else
+    # Replace references to old package with new package
+    sed -e "s,${olddir},${newdir},g" -e "s,${oldregex},${newpack},g" ${file} > ${outfile}
+
+    if [ "${suffix}" = "java" ]
+    then
+      # Replace literal tabs with two spaces
+      /bin/mv ${outfile} ${infile}
+      sed -e 's,	,  ,g' ${infile} > ${outfile}
+
+      # Delete extra whitespace at end of lines
+      /bin/mv ${outfile} ${infile}
+      sed -e 's, [ ]*$,,g' ${infile} > ${outfile}
+    fi
+
+    # Delete carriage returns (convert Windows style to Unix)
+    /bin/mv ${outfile} ${infile}
+    cat ${infile} | tr -d '\015' > ${outfile}
+  fi
+
+  # Finished with transformations
+  if diff ${file} ${outfile} > /dev/null 2>&1
+  then
+    # echo "No diffs between ${file} and ${outfile}"
+    /bin/rm -f ${outfile}
+  else
+    eval `stat -s ${file}`
+    touch -r ${file} ${outfile}
+    # echo "transforming ${file}"
+    /bin/mv ${outfile} ${file}
+    /bin/rmdir -p `dirname ${file}` > /dev/null 2>&1
+    chmod ${st_mode} ${file}
+  fi
+done
