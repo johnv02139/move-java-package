@@ -146,11 +146,7 @@ do
     # echo "No diffs between ${file} and ${outfile}"
     /bin/rm -f ${outfile}
   else
-    eval `stat -s ${file}`
-    touch -r ${file} ${outfile}
     # echo "transforming ${file}"
-    /bin/mv ${outfile} ${file}
-    /bin/rmdir -p `dirname ${file}` > /dev/null 2>&1
-    chmod ${st_mode} ${file}
+    /bin/cat ${outfile} > ${file}
   fi
 done
