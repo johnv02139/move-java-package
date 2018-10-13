@@ -1,0 +1,115 @@
+#!/bin/bash
+
+usage ()
+{
+  if [ -n "$1" ]
+  then
+    echo $*
+  fi
+  prog="`basename $0`"
+  echo "${prog}: make source tree conform to maven style"
+  echo "usage: ${prog} <directory>"
+  exit 1
+}
+
+if [ -z "$1" ]
+then
+  usage
+fi
+
+if [ -z "${TMP}" ]
+then
+  export TMP=/tmp
+fi
+
+if [ ! -d "${TMP}" ]
+then
+  echo "Error: could not find usable tmp directory"
+  echo "  Set TMP environment variable and re-run"
+  usage
+fi
+
+root=$1
+
+cd ${root} 2>/dev/null || usage "Error: could not cd to root directory ${root}"
+
+outfile=${TMP}/outfile.tmp
+/bin/rm -f ${outfile}
+
+diff_file=${TMP}/diff.diff
+/bin/rm -f ${diff_file}
+
+if [ ! -d src/main/java ]
+then
+  /bin/mkdir -p src/main/java
+  git mv src/main/org src/main/java/org
+
+  file=build.xml
+  sed 's,value="src/main",value="src/main/java",g' ${file} > ${outfile}
+  if ! diff ${file} ${outfile} > /dev/null 2>&1
+  then
+    # echo "transforming ${file}"
+    /bin/mv ${outfile} ${file}
+  fi
+fi
+
+if [ ! -d src/test/java ]
+then
+  /bin/mkdir -p src/test/java
+  git mv src/test/org src/test/java/org
+
+  file=build.xml
+  sed 's,value="src/test",value="src/test/java",g' ${file} > ${outfile}
+  if ! diff ${file} ${outfile} > /dev/null 2>&1
+  then
+    # echo "transforming ${file}"
+    /bin/mv ${outfile} ${file}
+  fi
+fi
+
+if [ ! -d src/main/resources ]
+then
+  git mv res src/main/resources
+fi
+
+if [ -f build.xml ]
+then
+  for file in `git ls-files`
+  do
+    sed "s,res/,src/main/resources/,g" ${file} > ${outfile}
+    /usr/bin/touch -r ${file} ${outfile}
+
+    # Finished with transformations
+    if diff ${file} ${outfile} > ${diff_file} 2>&1
+    then
+      # echo "No diffs between ${file} and ${outfile}"
+      /bin/rm -f ${outfile}
+    else
+      if egrep '^Binary files' ${diff_file} > /dev/null
+      then
+        echo "${file} is binary, not transforming it"
+        /bin/rm -f ${outfile}
+      else
+        # echo "transforming ${file}"
+        /bin/mv ${outfile} ${file}
+
+        suffix=${file##*.}
+        if [ "${suffix}" = "sh" ]
+        then
+          chmod 755 ${file}
+        fi
+        git add ${file}
+      fi
+    fi
+    /bin/rm -f ${diff_file}
+  done
+
+  file=build.xml
+  sed 's,value="res",value="src/main/resources",g' ${file} > ${outfile}
+  if ! diff ${file} ${outfile} > /dev/null 2>&1
+  then
+    # echo "transforming ${file}"
+    /bin/mv ${outfile} ${file}
+  fi
+  git add ${file}
+fi
