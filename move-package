@@ -7,8 +7,7 @@ usage ()
     echo $*
   fi
   prog="`basename $0`"
-  echo "${prog}: move java source files from one package to another,"
-  echo "    and clean up whitespace"
+  echo "${prog}: move java source files from one package to another"
   echo "usage: ${prog} <directory> <old-package> <new-package>"
   exit 1
 }
@@ -88,11 +87,11 @@ else
   files=`find . -type f`
 fi
 
-infile=${TMP}/infile.tmp
-/bin/rm -f ${infile}
-
 outfile=${TMP}/outfile.tmp
 /bin/rm -f ${outfile}
+
+diff_file=${TMP}/diff.diff
+/bin/rm -f ${diff_file}
 
 # Now we want to work with dots, not slashes.  Convert dots to slashes,
 # and leave slashes alone.
@@ -102,51 +101,30 @@ newpack=`echo ${new} | tr '/' '.'`
 
 for file in ${files}
 do
-  suffix=${file##*.}
-
-  if [ "${suffix}" = "jar" ]
-  then
-    /bin/cp ${file} ${outfile}
-  elif [ "${suffix}" = "png" ]
-  then
-    /bin/cp ${file} ${outfile}
-  elif [ "${suffix}" = "ico" ]
-  then
-    /bin/cp ${file} ${outfile}
-  elif [ "${suffix}" = "icns" ]
-  then
-    /bin/cp ${file} ${outfile}
-  elif echo ${file} | grep '\.idea' > /dev/null
-  then
-    # We exclude these because otherwise we add an unwanted final newline
-    /bin/cp ${file} ${outfile}
-  else
-    # Replace references to old package with new package
-    sed -e "s,${olddir},${newdir},g" -e "s,${oldregex},${newpack},g" ${file} > ${outfile}
-
-    if [ "${suffix}" = "java" ]
-    then
-      # Replace literal tabs with two spaces
-      /bin/mv ${outfile} ${infile}
-      sed -e 's,	,  ,g' ${infile} > ${outfile}
-
-      # Delete extra whitespace at end of lines
-      /bin/mv ${outfile} ${infile}
-      sed -e 's, [ ]*$,,g' ${infile} > ${outfile}
-    fi
-
-    # Delete carriage returns (convert Windows style to Unix)
-    /bin/mv ${outfile} ${infile}
-    cat ${infile} | tr -d '\015' > ${outfile}
-  fi
+  # sed "s,\([^.]\)${oldregex},\1${newpack},g" ${file} > ${outfile}
+  sed "s,${oldregex},${newpack},g" ${file} > ${outfile}
+  /usr/bin/touch -r ${file} ${outfile}
 
   # Finished with transformations
-  if diff ${file} ${outfile} > /dev/null 2>&1
+  if diff ${file} ${outfile} > ${diff_file} 2>&1
   then
     # echo "No diffs between ${file} and ${outfile}"
     /bin/rm -f ${outfile}
   else
-    # echo "transforming ${file}"
-    /bin/cat ${outfile} > ${file}
+    if egrep '^Binary files' ${diff_file} > /dev/null
+    then
+      echo "${file} is binary, not transforming it"
+      /bin/rm -f ${outfile}
+    else
+      # echo "transforming ${file}"
+      /bin/mv ${outfile} ${file}
+
+      suffix=${file##*.}
+      if [ "${suffix}" = "sh" ]
+      then
+        chmod 755 ${file}
+      fi
+    fi
   fi
+  /bin/rm -f ${diff_file}
 done
