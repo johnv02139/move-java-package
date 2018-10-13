@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Try to make sure file permissions are set correctly.
+# Normal files should NOT have executable bit set;
+# those in "scripts" directories, or with .sh suffix, should.
+
+usage ()
+{
+  if [ -n "$1" ]
+  then
+    echo $*
+  fi
+  prog="`basename $0`"
+  echo "${prog}: turn off executable bit on non-executable files"
+  echo "usage: ${prog} <directory>"
+  exit 1
+}
+
+if [ -z "$1" ]
+then
+  usage
+fi
+
+if [ -z "${TMP}" ]
+then
+  export TMP=/tmp
+fi
+
+if [ ! -d "${TMP}" ]
+then
+  echo "Error: could not find usable tmp directory"
+  echo "  Set TMP environment variable and re-run"
+  usage
+fi
+
+root=$1
+
+cd ${root} 2>/dev/null || usage "Error: could not cd to root directory ${root}"
+
+gitroot=`git rev-parse --show-toplevel 2>/dev/null`
+if [ -z "${gitroot}" ]
+then
+  echo "Error: ${root} is not a git repository"
+  exit 1
+fi
+
+files=`git ls-files`
+
+outfile=${TMP}/outfile.tmp
+/bin/rm -f ${outfile}
+
+diff_file=${TMP}/diff.diff
+/bin/rm -f ${diff_file}
+
+for file in ${files}
+do
+  suffix=${file##*.}
+  if ! egrep scripts ${file} > /dev/null
+  then
+    # There's no reason why png files should be skipped; it's just that
+    # I have a whole lot that are wrong, and I didn't want to have a big diff
+    if [ "${suffix}" != "png" ]
+    then
+      chmod 644 ${file}
+    fi
+  fi
+  if [ "${suffix}" = "sh" ]
+  then
+    chmod 755 ${file}
+  fi
+done
