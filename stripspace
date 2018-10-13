@@ -1,0 +1,83 @@
+#!/bin/bash
+
+usage ()
+{
+  if [ -n "$1" ]
+  then
+    echo $*
+  fi
+  prog="`basename $0`"
+  echo "${prog}: remove superfluous whitespace from git files"
+  echo "usage: ${prog} <directory>"
+  exit 1
+}
+
+if [ -z "$1" ]
+then
+  usage
+fi
+
+if [ -z "${TMP}" ]
+then
+  export TMP=/tmp
+fi
+
+if [ ! -d "${TMP}" ]
+then
+  echo "Error: could not find usable tmp directory"
+  echo "  Set TMP environment variable and re-run"
+  usage
+fi
+
+root=$1
+
+cd ${root} 2>/dev/null || usage "Error: could not cd to root directory ${root}"
+
+gitroot=`git rev-parse --show-toplevel 2>/dev/null`
+if [ -z "${gitroot}" ]
+then
+  echo "Error: ${root} is not a git repository"
+  exit 1
+fi
+
+files=`git ls-files`
+
+outfile=${TMP}/outfile.tmp
+/bin/rm -f ${outfile}
+
+diff_file=${TMP}/diff.diff
+/bin/rm -f ${diff_file}
+
+for file in ${files}
+do
+  # This is much simpler but has some behavior I don't like.
+  # git stripspace < ${file} > ${outfile}
+
+  # Replace literal tabs with two spaces
+  # Delete extra whitespace at end of lines
+  # Delete carriage returns (convert Windows style to Unix)
+  sed 's,	,  ,g' ${file} | sed -e 's, [ ]*$,,g' | tr -d '\015' > ${outfile}
+  /usr/bin/touch -r ${file} ${outfile}
+
+  diff ${file} ${outfile} > ${diff_file} 2>&1
+  st=$?
+  if [ "${st}" = "0" ]
+  then
+    echo "No diffs between ${file} and ${outfile}"
+    /bin/rm -f ${outfile}
+  else
+    if egrep '^Binary files' ${diff_file} > /dev/null
+    then
+      echo "${file} is binary, not transforming it"
+    else
+      echo "transforming ${file}"
+      /bin/mv ${outfile} ${file}
+
+      suffix=${file##*.}
+      if [ "${suffix}" = "sh" ]
+      then
+        chmod 755 ${file}
+      fi
+    fi
+  fi
+done
