@@ -50,27 +50,18 @@ diff_file=${TMP}/diff.diff
 
 for file in ${files}
 do
-  # This is much simpler but has some behavior I don't like.
-  # git stripspace < ${file} > ${outfile}
+  git stripspace < ${file} > ${outfile}
 
-  # Replace literal tabs with two spaces
-  # Delete extra whitespace at end of lines
-  # Delete carriage returns (convert Windows style to Unix)
-  sed 's,	,  ,g' ${file} | sed -e 's, [ ]*$,,g' | tr -d '\015' > ${outfile}
-  /usr/bin/touch -r ${file} ${outfile}
-
-  diff ${file} ${outfile} > ${diff_file} 2>&1
-  st=$?
-  if [ "${st}" = "0" ]
+  if diff ${file} ${outfile} > ${diff_file} 2>&1
   then
-    echo "No diffs between ${file} and ${outfile}"
+    # echo "No diffs between ${file} and ${outfile}"
     /bin/rm -f ${outfile}
   else
     if egrep '^Binary files' ${diff_file} > /dev/null
     then
       echo "${file} is binary, not transforming it"
+      /bin/rm -f ${outfile}
     else
-      echo "transforming ${file}"
       /bin/mv ${outfile} ${file}
 
       suffix=${file##*.}
