@@ -1,0 +1,100 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import re
+import argparse
+import logging
+
+logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
+
+# This makes sense to be hard-coded, and there possibly should be more
+administrative = ['.git', '.svn', 'CVS']
+# This should be configurable; hard-coding because I'm lazy.  But that's why
+# it's distinct from the first list
+ignorable = ['out', 'bin', 'lib', 'jdoc']
+# Should be configurable that this could be added to.
+binary_suffixes = ['.class', '.jar']
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Rename a Java class')
+    parser.add_argument('--old', required=True,
+                        help='the name of the old class')
+    parser.add_argument('--new', required=True,
+                        help='the new name for the class')
+    args = parser.parse_args()
+    return args
+
+def is_ignorable(fname, suffix):
+    return fname in administrative or fname in ignorable or suffix in binary_suffixes
+
+def replace_text(old, new, inpt):
+    # There's the problem where the name of the class could be found in an
+    # "unrelated" piece of text.  Like, if you foolishly named your class
+    # "Obj", then text which referred to "Object" could appear as matches.
+    # And of course, this would be incorrect.
+    #
+    # On the other hand, if you named your class MyUnusualClass, and there
+    # was a method called transformMyUnusualClass, well then that text
+    # presumably SHOULD be changed.
+    #
+    # There's no way to know for sure, but it seems like a good heuristic is,
+    # if the name is followed by a lower case letter, it's NOT referring to
+    # that class.  Otherwise, it probably is.
+    patt = old + "([^a-z]|$)"
+    replaced = re.sub(patt, new + r"\1", inpt)
+    if replaced == inpt:
+        # We don't even call this function unless the "old" name appears in the
+        # text.  So we might expect that, after replacement, the new text would
+        # be different.  But due to the fact that our actual regex is more
+        # restrictive than just the old name (see comment above), it's possible
+        # the class does not actually appear in this file, after all.
+        return None
+    else:
+        return replaced
+
+def process_file(root, basename, suffix, find, replacement):
+    fname = basename + suffix
+    path = os.path.join(root, fname)
+    with open(path, 'r') as f:
+        txt = f.read()
+    if find in txt:
+        newtxt = replace_text(find, replacement, txt)
+        if newtxt:
+            logging.debug('replacing {0} with {1} in {2}'
+                          .format(find, replacement, fname))
+            with open(path, 'w') as f:
+                f.write(newtxt)
+        else:
+            logging.info('{0} does not contain {1} as a Java identifer'
+                         .format(fname, find))
+    else:
+        logging.debug('text "{0}" not found in {1}'
+                      .format(find, fname))
+
+def process_directory(root, args):
+    find = args.old
+    replacement = args.new
+    for fname in os.listdir(root):
+        basename, suffix = os.path.splitext(fname)
+        path = os.path.join(root, fname)
+        if is_ignorable(fname, suffix):
+            logging.debug('ignoring {0}'.format(path))
+        elif os.path.isdir(path):
+            process_directory(path, args)
+        else:
+            process_file(root, basename, suffix,
+                         find, replacement)
+            if find in basename:
+                new_name = replace_text(find, replacement, basename)
+                if new_name:
+                    new_path = os.path.join(root, new_name + suffix)
+                    logging.debug('renaming {0} to {1}'.format(path, new_path))
+                    os.rename(path, new_path)
+
+def run_script():
+    args = parse_arguments()
+    process_directory(os.getcwd(), args)
+
+run_script()
+
