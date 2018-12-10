@@ -16,6 +16,10 @@ ignorable = ['out', 'bin', 'lib', 'jdoc']
 # Should be configurable that this could be added to.
 binary_suffixes = ['.class', '.jar']
 
+# TODO: typically, import statements are in alphabetical order.  If we just
+# replace the name of the old class with its new name, the resulting import
+# will be out of order
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Rename a Java class')
     parser.add_argument('--old', required=True,
@@ -85,6 +89,8 @@ def process_directory(root, args):
         else:
             process_file(root, basename, suffix,
                          find, replacement)
+            process_file(root, basename, suffix,
+                         find + 's', replacement + 's')
             if find in basename:
                 new_name = replace_text(find, replacement, basename)
                 if new_name:
@@ -97,4 +103,3 @@ def run_script():
     process_directory(os.getcwd(), args)
 
 run_script()
-
